@@ -1,0 +1,124 @@
+{
+  "model": "GRU-XGBoost-PSO",
+  "reference": "Khayat et al. (2025) Scientific African 29, e02884",
+  "device": "cuda",
+  "data": {
+    "n_samples": 364,
+    "n_train": 289,
+    "n_val": 39,
+    "n_test": 36,
+    "sunlight_range": "6:00-20:00",
+    "test_mode": "balanced"
+  },
+  "hyperparameters": {
+    "gru": {
+      "units": 128,
+      "dropout": 0.2,
+      "lr": 0.01,
+      "batch_size": 32
+    },
+    "xgboost": {
+      "learning_rate": 0.26,
+      "max_depth": 4,
+      "subsample": 0.91,
+      "colsample_bytree": 0.97
+    }
+  },
+  "test_results": {
+    "Persistence": {
+      "RMSE_MW": 7.81,
+      "nRMSE": 0.1825,
+      "MAE_MW": 4.66,
+      "MAPE_pct": 42.29,
+      "R2": 0.4862
+    },
+    "XGBoost": {
+      "RMSE_MW": 4.46,
+      "nRMSE": 0.1041,
+      "MAE_MW": 3.21,
+      "MAPE_pct": 32.12,
+      "R2": 0.8327
+    },
+    "GRU": {
+      "RMSE_MW": 6.61,
+      "nRMSE": 0.1545,
+      "MAE_MW": 4.77,
+      "MAPE_pct": 56.37,
+      "R2": 0.6316
+    },
+    "GRU-XGBoost": {
+      "RMSE_MW": 4.5,
+      "nRMSE": 0.1053,
+      "MAE_MW": 3.17,
+      "MAPE_pct": 31.28,
+      "R2": 0.829
+    }
+  },
+  "weather_results": {
+    "Persistence": {
+      "sunny": {
+        "RMSE_MW": 3.73,
+        "nRMSE": 0.0877,
+        "MAE_MW": 2.43,
+        "MAPE_pct": 13.32,
+        "R2": 0.9137
+      },
+      "cloudy": {
+        "RMSE_MW": 8.22,
+        "nRMSE": 0.2342,
+        "MAE_MW": 4.98,
+        "MAPE_pct": 46.34,
+        "R2": 0.363
+      }
+    },
+    "GRU": {
+      "sunny": {
+        "RMSE_MW": 5.96,
+        "nRMSE": 0.1401,
+        "MAE_MW": 5.01,
+        "MAPE_pct": 62.12,
+        "R2": 0.7796
+      },
+      "cloudy": {
+        "RMSE_MW": 6.7,
+        "nRMSE": 0.1908,
+        "MAE_MW": 4.74,
+        "MAPE_pct": 55.56,
+        "R2": 0.5771
+      }
+    },
+    "XGBoost": {
+      "sunny": {
+        "RMSE_MW": 4.65,
+        "nRMSE": 0.1093,
+        "MAE_MW": 3.67,
+        "MAPE_pct": 19.35,
+        "R2": 0.866
+      },
+      "cloudy": {
+        "RMSE_MW": 4.43,
+        "nRMSE": 0.1261,
+        "MAE_MW": 3.14,
+        "MAPE_pct": 33.91,
+        "R2": 0.8152
+      }
+    },
+    "GRU-XGBoost": {
+      "sunny": {
+        "RMSE_MW": 4.26,
+        "nRMSE": 0.1001,
+        "MAE_MW": 3.49,
+        "MAPE_pct": 17.48,
+        "R2": 0.8876
+      },
+      "cloudy": {
+        "RMSE_MW": 4.54,
+        "nRMSE": 0.1293,
+        "MAE_MW": 3.12,
+        "MAPE_pct": 33.21,
+        "R2": 0.8059
+      }
+    }
+  },
+  "pso_used": false
+}

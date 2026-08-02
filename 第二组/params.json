@@ -1,0 +1,446 @@
+{
+  "region": {
+    "name": "闽清县",
+    "latitude": 26.22,
+    "longitude": 118.86,
+    "_note": "坐标精确匹配NASA POWER数据集"
+  },
+  "pv_system": {
+    "P_rated_MW": 25.0,
+    "G_STC": 1000.0,
+    "T_STC": 25.0,
+    "k_temp": -0.0043,
+    "NOCT": 45.0,
+    "system_efficiency": 0.9452,
+    "P_rated_MW__含义": "光伏系统额定装机容量(MW)。25MW与算力节点5MW形成~5:1峰值供需比, 确保S2中光伏溢出→弃光, S3可通过算随电走消纳更多。V2: 从15MW上调",
+    "G_STC__含义": "标准测试条件辐照度(W/m²)。IEC 61215标准常数，无需修改",
+    "T_STC__含义": "标准测试条件电池温度(°C)。IEC 61215标准常数，无需修改",
+    "k_temp__含义": "单晶硅温度系数(/°C)。-0.0043代表每升高1°C效率下降0.43%，文献标准值",
+    "NOCT__含义": "标称工作电池温度(°C)。IEC 61215标准值45°C，用于从环境温度估算电池片实际温度",
+    "system_efficiency__含义": "光伏系统综合效率94.52%。含逆变器效率(~97%)、线损(~2%)、组件衰减/不匹配/灰尘(~3%)、MPPT跟踪误差等。乘在电池片直流出力之后得到并网交流出力"
+  },
+  "grid": {
+    "P_grid_max_MW": 20.0,
+    "carbon_factor_tCO2_per_MWh": 0.581,
+    "carbon_price_CNY_per_tCO2": 80.0,
+    "feed_in_price_CNY_per_kWh": 0.55,
+    "P_grid_max_MW__含义": "电网接入最大购电功率(MW)。20MW对应县域35kV变电站典型容量，代码会根据实际供需自动放宽",
+    "carbon_factor_tCO2_per_MWh__含义": "电网碳排放因子(tCO2/MWh)。0.581为生态环境部公布的2024年全国电网平均值",
+    "carbon_price_CNY_per_tCO2__含义": "碳价(元/tCO2)。80元为2025年全国碳市场CEA均价，用于将碳排放货币化纳入目标函数",
+    "feed_in_price_CNY_per_kWh__含义": "弃光惩罚(元/kWh)。0.55≈平段电价0.58，代表弃光的机会成本（本可以替代电网购电）。V2: 从0.35上调以消除MILP在PV峰值弃光+放电的异常调度"
+  },
+  "battery": {
+    "E_cap_MWh__sensitivity": [
+      0.0,
+      15.0,
+      50.0,
+      75.0
+    ],
+    "E_cap_MWh__default": 50.0,
+    "C_rate": 0.5,
+    "eta_ch": 0.93,
+    "eta_dis": 0.93,
+    "SOC_min": 0.0,
+    "SOC_max": 1.0,
+    "SOC_init": 0.5,
+    "epc_cost_CNY_per_kWh": 1000.0,
+    "vat_rate": 0.13,
+    "useful_life_years": 15,
+    "E_cap_MWh__sensitivity__含义": "储能容量序列(MWh)。0→15(0.6h)→50(2h)→75(3h)，对应25MW光伏:储能=1:0/0.6/2/3小时配比。25MW光伏×2h=50MWh为推荐值",
+    "E_cap_MWh__default__含义": "默认储能容量(MWh)。50MWh=25MW光伏×2h储能时长，光伏:储能=1:2配比",
+    "C_rate__含义": "充放电倍率0.5C。P_ch=P_dis=E_cap×0.5，磷酸铁锂行业标准(2h系统)。5MWh→2.5MW。原硬编码4MW(0.8C)偏高，且敏感性中3MWh小电池也配4MW不合理",
+    "eta_ch__含义": "充电效率。0.93代表充1MWh电实际储存0.93MWh",
+    "eta_dis__含义": "放电效率。0.93代表放1MWh电实际输出0.93MWh",
+    "epc_cost_CNY_per_kWh__含义": "储能EPC工程造价(元/kWh)，含PCS/BMS/安装。1000为磷酸铁锂储能电站行业均价。转固=EPC×(1-13%增值税)=870元/kWh",
+    "vat_rate__含义": "增值税进项税率13%。EPC总价÷1.13或EPC单价×(1-0.13)为可抵扣后转固金额",
+    "useful_life_years__含义": "储能折旧年限。15年为磷酸铁锂储能电站财务会计通用年限。日折旧=转固/(15×365)=元/天",
+    "SOC_min__含义": "储能荷电状态下限。0.0=0%，满充满放策略，充分利用储能容量",
+    "SOC_max__含义": "储能荷电状态上限。1.0=100%，满充满放策略",
+    "SOC_init__含义": "储能初始SOC(deprecated)。模型已改为SOC[0]自由决策+日循环约束SOC[23]>=SOC[0]，每日自动从最优状态开始，不再硬编固定初始值",
+    "wear_cost_CNY_per_kWh__含义": "储能充放损耗成本(元/kWh)。0.05元基于电池系统成本250元/kWh÷5000次循环寿命"
+  },
+  "compute_node": {
+    "P_node_rated_MW": 5.0,
+    "P_node_idle_MW": 1.0,
+    "PUE": 1.4,
+    "P_node_rated_MW__含义": "边缘算力节点IT设备额定功耗(MW)。5MW基于闽清2000P算力估算。模型自动xPUE得电网侧实际功耗",
+    "P_node_idle_MW__含义": "节点IT空闲功耗(MW)。1.0MW=5MW×20%，GPU集群8卡服务器待机基线。电网侧实际=1.0×1.4(PUE)=1.4MW。参考：普通CPU服务器15-25%，AI GPU集群20-30%",
+    "PUE__含义": "电能使用效率=数据中心总能耗/IT设备能耗。1.4=风冷县域数据中心。P_node_rated x PUE=7.0MW为电网侧实际功耗"
+  },
+
+
+  
+  "ai_tasks": {
+    "E_rigid_daily_MWh": 19.2,
+    "E_elastic_daily_MWh": 36.0,
+    "E_cold_daily_MWh": 12.0,
+    "hourly_max_ratio__elastic": 0.25,
+    "hourly_max_ratio__cold": 0.25,
+    "rigid_profile_type": "uniform",
+    "_note_total": "67.2MWh daily total = 19.2(rigid)+36(elastic)+12(cold)=67.2, 2.8MW IT avg, 节点净可用=(5-1)×24=96MWh, 利用率70%留有30%调度裕量",
+    "E_rigid_daily_MWh__含义": "刚性任务日总能耗(MWh)。19.2MWh=0.8MW×24h，安防监控、设备告警等不可中断任务。减少刚性占比，为弹性调度留空间",
+    "E_elastic_daily_MWh__含义": "弹性任务日总能耗(MWh)。36.0MWh占54%，工业质检等可短时调节。S2中=1.5MW/h均匀分布，S3中MILP可将其集中到光伏高峰8h内→5MW/h峰值, 创造明显功率差异",
+    "E_cold_daily_MWh__含义": "温冷任务日总能耗(MWh)。12.0MWh占18%，批量数据处理等可延迟执行。S3中MILP可推迟到正午光伏溢出时段集中处理",
+    "hourly_max_ratio__elastic__含义": "弹性任务单小时功率上限。0.25=36×0.25=9MW上限(远大于节点剩余容量，不绑定优化)。增大到25%允许MILP在光伏高峰集中执行弹性任务",
+    "hourly_max_ratio__cold__含义": "温冷任务单小时功率上限。0.25=12×0.25=3MW上限。同步提高以允许任务集中",
+    "rigid_profile_type__含义": "刚性任务分布模式。uniform=24小时均匀分布，代表持续运行的实时任务",
+    "_note_total__含义": "V2参数(增大S2/S3区分度): 总任务从96→67.2MWh, S2恒定2.8MW IT(3.92MW电网侧), S3可在光伏高峰飙至5MW IT(7MW电网侧)、夜间降至0.8MW IT(1.12MW电网侧)。光伏溢出时S2被迫弃光、S3可全量消纳"
+  },
+  "electricity_price": {
+    "pricing_model": "two_part",
+    "voltage_level": "1-10kV",
+    "peak_hours": [
+      10,
+      11,
+      15,
+      16,
+      17,
+      18,
+      19,
+      21
+    ],
+    "peak_price_CNY_per_kWh": 0.8010,
+    "valley_hours": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "valley_price_CNY_per_kWh": 0.3486,
+    "flat_hours": [
+      8,
+      9,
+      12,
+      13,
+      14,
+      20,
+      22,
+      23
+    ],
+    "flat_price_CNY_per_kWh": 0.5842,
+    "spike_hours": [
+      11,
+      17
+    ],
+    "spike_price_CNY_per_kWh": 0.8833,
+    "spike_months": [
+      7,
+      8,
+      9
+    ],
+    "demand_charge_CNY_per_kW_month": 40.0,
+    "capacity_charge_CNY_per_kVA_month": 25.0,
+    "proxy_purchase_price_CNY_per_kWh": 0.3739,
+    "line_loss_price_CNY_per_kWh": 0.0151,
+    "transmission_distribution_price_CNY_per_kWh": 0.1292,
+    "government_funds_CNY_per_kWh": 0.02766875,
+    "system_operation_fee_CNY_per_kWh": 0.0383,
+    "peak_surcharge_ratio": 1.58,
+    "valley_discount_ratio": 0.37,
+    "spike_surcharge_ratio": 1.80,
+    "pricing_model__含义": "电价模式从单一制改为两部制(电度电价+需量电价)。数据来源：国网福建省电力有限公司代理购电工商业用户电价表2025年8月",
+    "voltage_level__含义": "电压等级1-10(20)kV。县域35kV变电站供出的10kV侧工商业用户",
+    "peak_hours__含义": "峰时段 10:00-12:00, 15:00-20:00, 21:00-22:00 共8小时。闽发改规〔2023〕8号",
+    "peak_price_CNY_per_kWh__含义": "峰段电度电价(元/kWh)。0.8010=代理购电0.3739×1.58+线损0.0151+输配0.1292+政府基金0.0277+系统运行费0.0383",
+    "valley_hours__含义": "谷时段 0:00-8:00 共8小时。闽发改规〔2023〕8号",
+    "valley_price_CNY_per_kWh__含义": "谷段电度电价(元/kWh)。0.3486=代理购电0.3739×0.37+线损0.0151+输配0.1292+政府基金0.0277+系统运行费0.0383",
+    "flat_hours__含义": "平时段 8:00-10:00, 12:00-15:00, 20:00-21:00, 22:00-24:00 共8小时",
+    "flat_price_CNY_per_kWh__含义": "平段电度电价(元/kWh)。0.5842=代理购电0.3739+线损0.0151+输配0.1292+政府基金0.0277+系统运行费0.0383",
+    "spike_hours__含义": "尖峰时段 11:00-12:00, 17:00-18:00。仅7-9月执行，上浮80%。闽发改规〔2023〕8号",
+    "spike_price_CNY_per_kWh__含义": "尖峰电度电价(元/kWh)。0.8833=代理购电0.3739×1.80+线损0.0151+输配0.1292+政府基金0.0277+系统运行费0.0383",
+    "spike_months__含义": "尖峰电价执行月份(7-9月)",
+    "demand_charge_CNY_per_kW_month__含义": "需量电价(元/kW/月)。按变压器实际最大需量计收，两部制用户必须缴纳。日等效约1.33元/kW",
+    "capacity_charge_CNY_per_kVA_month__含义": "容量电价(元/kVA/月)。按变压器容量计收，与需量电价二选一。日等效约0.83元/kVA",
+    "proxy_purchase_price_CNY_per_kWh__含义": "代理购电价格。2025年8月国网福建工商业代理购电价格",
+    "line_loss_price_CNY_per_kWh__含义": "上网环节线损费用折价",
+    "transmission_distribution_price_CNY_per_kWh__含义": "电度输配电价。两部制1-10kV=0.1292，显著低于单一制0.1633（因需量费已覆盖固定成本）",
+    "government_funds_CNY_per_kWh__含义": "政府性基金及附加(重大水利0.0020+水库移民0.0062+可再生0.019+小水库0.0005≈0.0277)",
+    "system_operation_fee_CNY_per_kWh__含义": "系统运行费折价(辅助服务+抽蓄+损益+交叉补贴+煤电容量等)",
+    "peak_surcharge_ratio__含义": "峰段上浮比例58%(相对代理购电价格)",
+    "valley_discount_ratio__含义": "谷段下浮比例63%(相对代理购电价格，即0.37倍)",
+    "spike_surcharge_ratio__含义": "尖峰上浮比例80%(相对代理购电价格)",
+    "_source": "国网福建省电力有限公司代理购电工商业用户电价表 2025年8月，闽发改规〔2023〕8号",
+    "_price_breakdown": "两部制1-10kV平段=代理0.3739+线损0.0151+输配0.1292+基金0.0277+运行费0.0383=0.5842。另需缴纳需量费40元/kW/月或容量费25元/kVA/月",
+    "_single_vs_two_part_note": "原单一制平段0.6183→两部制平段0.5842(降0.034元)。原因：两部制输配电价低(0.1292 vs 0.1633)，但需额外缴纳需量/容量费。对算力节点这种持续高负载用户，两部制更经济"
+  },
+  "minqing_hydro": {
+    "P_hydro_rated_MW": 5.0,
+    "season": "summer",
+    "base_load_ratio": 0.7,
+    "peak_boost_ratio": 0.2,
+    "_note": "闽清县小水电资源丰富，假设5MW装机。丰水期base 70%，枯水期base 30%",
+    "P_hydro_rated_MW__含义": "闽清县小水电额定装机(MW)。5MW为基于公开资料的保守估计(闽清是福建省小水电大县)",
+    "season__含义": "默认季节(仅用于参数文件标注，实际运行时milp_optimizer.py根据验证日期月份自动选择)",
+    "base_load_ratio__含义": "丰水期基荷比例。0.70=70%额定功率，径流式小水电全天出力相对稳定",
+    "peak_boost_ratio__含义": "丰水期日间调度增幅。0.20代表日间(9-17点)可在基荷基础上再增加20%出力",
+    "_note__含义": "简化模型：用sin函数模拟日内波动。枯水期基荷降至30%。非闽清实际水文数据，报告中需标注为示意性构造。"
+  },
+  "minqing_load_adjust": {
+    "ceramic_industry_ratio": 0.25,
+    "residential_ratio": 0.35,
+    "commercial_ratio": 0.25,
+    "agriculture_ratio": 0.15,
+    "_note": "闽清以陶瓷工业为特色，工业占比提高",
+    "ceramic_industry_ratio__含义": "闽清陶瓷工业负荷占比。25%高于通用模型的45%×0.25隐含值，体现闽清产业结构特征",
+    "residential_ratio__含义": "居民负荷占比。35%",
+    "commercial_ratio__含义": "商业负荷占比。25%",
+    "agriculture_ratio__含义": "农业/市政负荷占比。15%",
+    "_note__含义": "闽清验证时自动施加逐时调整：工作时段(8-18h)工业+5%，晚峰(18-22h)居民-3%。"
+  },
+  "topsis": {
+    "weights": [
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125
+    ],
+    "indicators": [
+      "技术成熟度(TRL)",
+      "对产业落地的重要性",
+      "对绿电消纳贡献",
+      "对碳减排贡献",
+      "对经济性的影响",
+      "对县域场景适配性",
+      "实施难度(负向)",
+      "风险等级(负向)"
+    ],
+    "indicator_directions": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      -1,
+      -1
+    ],
+    "matrix": {
+      "技术一_绿电出力预测": [
+        8,
+        8,
+        9,
+        5,
+        6,
+        7,
+        2,
+        1
+      ],
+      "技术二_边缘算力弹性调度": [
+        6,
+        9,
+        8,
+        7,
+        7,
+        8,
+        5,
+        3
+      ],
+      "技术三_源网荷储算碳协同": [
+        5,
+        10,
+        10,
+        9,
+        8,
+        7,
+        5,
+        3
+      ],
+      "技术四_储能协同保障": [
+        7,
+        7,
+        7,
+        6,
+        6,
+        6,
+        4,
+        2
+      ],
+      "技术五_轻量化AI部署": [
+        8,
+        6,
+        4,
+        3,
+        5,
+        9,
+        3,
+        2
+      ]
+    },
+    "weights__含义": "8个评价指标权重。当前全部等权0.125，如需调整确保8个权重之和=1.0",
+    "indicators__含义": "8个评价指标名称列表。前6个为正向指标(越大越好)，后2个为负向指标(越小越好)",
+    "indicator_directions__含义": "指标方向数组。1=正向(越大越好)，-1=负向(越小越好)。必须与indicators顺序一致",
+    "matrix__含义": "5项技术×8项指标的评分矩阵。评分范围1-10。注意：本TOPSIS定位为'含难度惩罚的开发优先级排序'，报告叙事中不可当作'技术价值排序'使用"
+  },
+  "data_paths": {
+    "nasa_power_excel": "data/NASA POWER 原始气象数据说明文档（闽清县-2025全整年）.xlsx",
+    "nasa_power_csv": "data/POWER_Point_Hourly_20250101_20260101_026d22N_118d86E_LST (1).csv",
+    "green_power_curves": "data/green_power_curves.csv",
+    "minqing_raw_days": "data/minqing_raw_days.csv",
+    "minqing_hydro_curve": "data/minqing_hydro_curve.csv",
+    "base_load_curves": "data/base_load_curves.csv"
+  },
+  "forecast": {
+    "sunlight_start_hour": 6,
+    "sunlight_end_hour": 20,
+    "train_ratio": 0.8,
+    "val_ratio": 0.1,
+    "test_ratio": 0.1,
+    "pso": {
+      "n_particles": 10,
+      "n_iterations": 15,
+      "w": 0.7,
+      "c1": 1.5,
+      "c2": 1.5,
+      "_note": "PSO参数。n_particles=粒子数, n_iterations=迭代数, w=惯性权重, c1/c2=学习因子"
+    },
+    "gru_search_space": {
+      "units": [32, 256],
+      "dropout": [0.1, 0.5],
+      "learning_rate": [0.001, 0.01],
+      "batch_size": [16, 128],
+      "_note": "GRU超参搜索空间，对标论文Table 3"
+    },
+    "xgb_search_space": {
+      "learning_rate": [0.01, 0.3],
+      "max_depth": [3, 10],
+      "subsample": [0.5, 1.0],
+      "colsample_bytree": [0.5, 1.0],
+      "_note": "XGBoost超参搜索空间，对标论文Table 4"
+    },
+    "training": {
+      "epochs": 200,
+      "early_stopping_patience": 30,
+      "xgb_n_estimators": 500,
+      "xgb_early_stopping_rounds": 50
+    },
+    "_note": "日前PV预测参数 — 基于Khayat et al. (2025) Scientific African 29, e02884",
+    "sunlight_start_hour__含义": "日照起始小时(6=早上6点)，仅保留有日照时段以排除夜间PV=0的无效样本",
+    "sunlight_end_hour__含义": "日照结束小时(20=晚上8点)，15h/天",
+    "train_ratio__含义": "训练集占比。80%用于训练GRU和XGBoost",
+    "val_ratio__含义": "验证集占比。10%用于PSO超参选择和early stopping",
+    "test_ratio__含义": "测试集占比。10%用于最终评估",
+    "pso__含义": "粒子群优化算法配置。减少particles/iterations可加速但可能找不到最优值",
+    "gru_search_space__含义": "GRU超参搜索边界。units=GRU隐层神经元数, dropout=防止过拟合, lr=学习率, batch_size=批大小",
+    "xgb_search_space__含义": "XGBoost超参搜索边界。lr=学习率, depth=树深度, subsample=行采样, colsample=列采样",
+    "training__含义": "训练控制参数。增大epochs可能提升精度但增加耗时"
+  },
+  "simulation": {
+    "time_steps": 24,
+    "kmeans_clusters": 4,
+    "selected_dates_for_validation": [
+      "2025-07-15",
+      "2025-01-20",
+      "2025-04-10"
+    ],
+    "_validation_dates_note": "晴天/阴天/波动日，模块一运行后根据实际数据微调",
+    "time_steps__含义": "仿真时间步数。24=逐时仿真一天",
+    "kmeans_clusters__含义": "K-Means聚类数。4=从365天中提取4条典型日曲线(晴/多云/阴/雨)",
+    "selected_dates_for_validation__含义": "闽清验证候选日期列表。模块一运行后会根据实际数据自动调整",
+    "_validation_dates_note__含义": "当前实际选取: 晴天2025-04-03, 中等日照2025-02-28, 波动日2025-04-19"
+  },
+  "milp_scene_config": {
+    "general_model": {
+      "pv_scene_index": 0,
+      "load_scene_index": 3,
+      "_note": "pv=场景1(峰值最高), load=场景4(周末轻载)"
+    },
+    "minqing_validation": {
+      "load_scene_index": 3,
+      "use_hydro": true,
+      "_note": "闽清验证也改用周末轻载日负荷; use_hydro=False表示纯光伏验证"
+    },
+    "general_model__含义": "通用县域模型场景配置——pv_scene_index=0用峰值最高的典型日，load_scene_index=3用周末轻载日，最大化光伏/负荷比",
+    "minqing_validation__含义": "闽清验证场景配置——load_scene_index=3同轻载日，use_hydro=true加入小水电"
+  },
+  "minqing_validation_modes": {
+    "with_hydro": {
+      "use_hydro": true,
+      "note": "光伏+小水电(闽清真实场景)"
+    },
+    "pv_only": {
+      "use_hydro": false,
+      "note": "纯光伏(清晰展示算随电走优势)"
+    }
+  },
+  "base_load": {
+    "P_peak_MW": 50.0,
+    "residential_ratio": 0.4,
+    "industrial_ratio": 0.45,
+    "agriculture_ratio": 0.15,
+    "_note": "城乡居民/工业/农业负荷比例(和为1.0)。闽清县陶瓷工业发达，工业占比较高",
+    "P_peak_MW__含义": "县域年最高峰值负荷(MW)。50MW为典型县域规模，用于构造标准化日负荷基线。注意：此值与pv_system.P_rated_MW独立，前者是负荷侧峰值，后者是光伏侧装机",
+    "residential_ratio__含义": "城乡居民负荷占比。0.40=40%",
+    "industrial_ratio__含义": "工业负荷占比。0.45=45%",
+    "agriculture_ratio__含义": "农业/市政负荷占比。0.15=15%",
+    "_note__含义": "三个比例之和必须=1.0，generate_base_load.py有断言校验。负荷基线是基于行业标准化日负荷曲线(sin+exp函数组合)构造的示意性数据，非闽清实测。"
+  },
+  "irr": {
+    "project_life_years": 20,
+    "income_tax_rate": 0.25,
+    "discount_rate": 0.05,
+    "pv_system": {
+      "unit_cost_CNY_per_kW": 3000,
+      "om_rate": 0.01,
+      "useful_life_years": 25,
+      "salvage_rate": 0.05
+    },
+    "battery": {
+      "unit_cost_CNY_per_kWh": "inherited_from_battery.epc_cost_CNY_per_kWh",
+      "om_rate": 0.02,
+      "useful_life_years": 15,
+      "salvage_rate": 0.05
+    },
+    "compute_node": {
+      "unit_cost_CNY_per_kW_IT": 15000,
+      "om_rate": 0.05,
+      "useful_life_years": 15,
+      "refresh_rate": 0.50,
+      "refresh_interval_years": 8,
+      "salvage_rate": 0.05
+    },
+    "revenue": {
+      "ai_service_price_CNY_per_kWh": 0.90,
+      "annual_ai_service_hours": 8000
+    },
+    "__含义总说明": {
+      "project_life_years": "项目评价周期20年，行业标准假设",
+      "income_tax_rate": "企业所得税率25%",
+      "discount_rate": "折现率5%，用于NPV计算",
+      "pv_system.unit_cost": "分布式光伏EPC均价3000元/kW，含组件/逆变器/支架/安装",
+      "pv_system.useful_life_years": "光伏组件寿命25年，超项目周期，只计残值",
+      "pv_system.om_rate": "年运维费率1%，主要为清洗/巡检",
+      "battery.unit_cost": "复用battery.epc_cost_CNY_per_kWh=1000元/kWh",
+      "battery.useful_life_years": "磷酸铁锂储能系统15年，日历寿命覆盖大部分项目周期",
+      "compute_node.useful_life_years": "边缘算力基础设施15年(供配电/制冷/机房)，GPU服务器8年更换50%",
+      "compute_node.unit_cost": "边缘数据中心15000元/kW_IT，利用县域现有厂房/变电站改造降本",
+      "revenue.ai_service_price": "边缘AI服务等效价值0.90元/kWh(工业质检/设备巡检/农业识别/能耗管理/碳管理)",
+      "revenue.annual_ai_service_hours": "年服务8000小时≈91%利用率"
+    }
+  },
+  "region__含义": "目标县域基本信息。经纬度精确匹配NASA POWER数据集格点(26.22°N, 118.86°E, 0.5°×0.625°分辨率)",
+  "data_paths__含义": "所有输入输出文件的相对路径。修改此处可切换数据源，无需改动代码",
+  "__顶层结构说明": {
+    "region": "地区基础信息",
+    "pv_system": "光伏系统物理参数（修改P_rated_MW可调整光伏渗透率）",
+    "grid": "电网与经济参数（碳价和电价是驱动MILP调度的经济信号）",
+    "battery": "储能系统参数（E_cap_MWh__sensitivity控制敏感性分析遍历的容量序列）",
+    "compute_node": "边缘算力节点参数",
+    "ai_tasks": "AI任务负荷参数（修改E_elastic占比可调整'算随电走'优化空间）",
+    "electricity_price": "福建省分时电价（峰谷价比越大，调度经济驱动力越强）",
+    "minqing_hydro": "闽清小水电参数（简化模型，报告需标注为示意性构造）",
+    "minqing_load_adjust": "闽清产业负荷调整系数",
+    "topsis": "TOPSIS评价参数（评分矩阵可调整，叙事定位为'开发优先级排序'）",
+    "data_paths": "数据文件路径（换地区时修改此处）",
+    "simulation": "仿真控制参数",
+    "milp_scene_config": "场景配置（绿电曲线/负荷曲线索引，支持换地区）",
+    "base_load": "基础负荷构造参数（比例和必须=1.0）"
+  }
+}

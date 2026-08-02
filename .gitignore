@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 临时提取文件
+_*.txt
+_*.py
+
+# 压缩包（冗余备份）
+*.zip
+*.rar
+
+# Word临时文件
+~$*.docx
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
