@@ -1,8 +1,8 @@
 task: detect
 mode: train
-model: C:\Users\zoro\tiaozhanbei-2026\第二组\yolov8n.pt
-data: C:\Users\zoro\AppData\Local\Temp\ceramic_turkv2qe\ceramic\ceramic tile dataset.v1i.yolov8\data.yaml
-epochs: 50
+model: C:\Users\zoro\tiaozhanbei-2026\第二组\yolov8s.pt
+data: C:\Users\zoro\AppData\Local\Temp\ceramic_2b018mby\ceramic\ceramic tile dataset.v1i.yolov8\data.yaml
+epochs: 200
 time: null
 patience: 100
 batch: 16
