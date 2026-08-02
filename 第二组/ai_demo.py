@@ -201,26 +201,35 @@ def prepare_ceramic_dataset(data_dir="data/ceramic_defects"):
             print(f"[OK] 本地数据集: {data_dir} ({jpg_count}张)")
             return str(data_dir), f"✅ 本地数据集 ({data_dir})"
 
-    # ── 2. 尝试下载 CE7-DET 公开数据集 ──
-    print("\n尝试下载 CE7-DET 陶瓷缺陷公开数据集（SCI论文数据）...")
-    ce7_urls = [
-        "https://github.com/PGYBHF/NGASP-YOLO-and-CE7-DET/archive/refs/heads/main.zip",
-    ]
-    for url in ce7_urls:
-        try:
-            zip_path = "data/ce7det_temp.zip"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            resp = urllib.request.urlopen(req, timeout=30)
-            with open(zip_path, 'wb') as f:
-                f.write(resp.read())
-            with zipfile.ZipFile(zip_path, 'r') as zf:
-                zf.extractall("data/CE7-DET/")
-            os.remove(zip_path)
-            print("[OK] CE7-DET数据集下载成功！真实陶瓷表皿缺陷数据（2,964张，7类）")
-            return str(Path("data/CE7-DET")), "✅ CE7-DET SCI论文数据集（真实陶瓷表皿，2,964张）"
-        except Exception as e:
-            print(f"  CE7-DET下载失败: {type(e).__name__}")
-            continue
+    # ── 2. 尝试下载 Mendeley Ceramics 公开数据集（免登录）──
+    print("\n尝试下载 Mendeley Ceramics 数据集（免登录，18,560张增强patch）...")
+    mendeley_url = "https://data.mendeley.com/public-files/datasets/2bkhytgwm8/files/6e0cb3c8-2f3f-4ef5-9e02-3c5f45a9a8e2/file_downloaded"
+    try:
+        zip_path = "data/mendeley_temp.zip"
+        req = urllib.request.Request(mendeley_url, headers={'User-Agent': 'Mozilla/5.0'})
+        resp = urllib.request.urlopen(req, timeout=60)
+        total = int(resp.headers.get('Content-Length', 0))
+        with open(zip_path, 'wb') as f:
+            downloaded = 0
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            zf.extractall("data/mendeley_ceramics/")
+        os.remove(zip_path)
+        print("[OK] Mendeley Ceramics 下载成功！177MB, 18,560张patch")
+
+        # 尝试自动从mask转YOLO bbox
+        yaml_path = convert_mendeley_masks_to_yolo("data/mendeley_ceramics")
+        if yaml_path:
+            return yaml_path, "✅ Mendeley Ceramics（真实陶瓷洁具产线数据，18,560张patch）"
+        return str(Path("data/mendeley_ceramics")), "⚠️ Mendeley Ceramics（mask需手动转YOLO）"
+    except Exception as e:
+        print(f"  Mendeley下载失败: {type(e).__name__}")
+        # 继续尝试其他源...
 
     # ── 4. 兜底：合成数据（仅供代码验证，比赛请使用真实数据集）──
     print("\n" + "=" * 60)
@@ -250,6 +259,129 @@ def prepare_ceramic_dataset(data_dir="data/ceramic_defects"):
 
     data_yaml = generate_synthetic_ceramic_data(data_dir)
     return data_yaml, "⚠️ 合成数据（仅供代码验证，非比赛数据）"
+
+
+def convert_mendeley_masks_to_yolo(data_dir="data/mendeley_ceramics"):
+    """
+    将Mendeley Ceramics数据集的绿色mask转为YOLO bbox格式
+
+    Mendeley数据集标注方式：缺陷区域涂成纯绿色(RGB:0,255,0)作为弱标注。
+    本函数将绿色像素的外接矩形转换为YOLO格式的bounding box。
+
+    返回
+    ----------
+    data_yaml : str or None
+    """
+    from PIL import Image
+    import shutil
+
+    data_path = Path(data_dir)
+    if not data_path.exists():
+        return None
+
+    # 查找所有图片
+    img_files = list(data_path.rglob("*.jpg")) + list(data_path.rglob("*.png")) + list(data_path.rglob("*.bmp"))
+    if len(img_files) < 100:
+        return None
+
+    print(f"  转换 Mendeley mask → YOLO bbox ({len(img_files)}张)...")
+
+    # 创建YOLO目录结构
+    yolo_dir = Path("data/mendeley_ceramics_yolo")
+    for split in ["train", "val"]:
+        (yolo_dir / "images" / split).mkdir(parents=True, exist_ok=True)
+        (yolo_dir / "labels" / split).mkdir(parents=True, exist_ok=True)
+
+    # 查找mask图片（绿色标注的）
+    mask_files = []
+    normal_files = []
+    for f in img_files:
+        if "mask" in f.name.lower() or "defect" in f.name.lower() or "label" in f.name.lower():
+            mask_files.append(f)
+        else:
+            normal_files.append(f)
+
+    # 如果找不到mask文件，检查图片本身是否含绿色标注
+    if len(mask_files) == 0:
+        # 所有图片都可能是原始图+mask混合
+        all_files = img_files
+    else:
+        all_files = normal_files  # 原图
+
+    CLASS_NAME = "defect"  # 二分类：缺陷/正常
+
+    train_count = 0
+    val_count = 0
+    rng = np.random.RandomState(42)
+
+    for img_file in all_files:
+        try:
+            img = Image.open(img_file).convert("RGB")
+            w, h = img.size
+            arr = np.array(img)
+
+            # 检测绿色像素 (G > 200, R < 100, B < 100)
+            green_mask = (arr[:, :, 1] > 180) & (arr[:, :, 0] < 80) & (arr[:, :, 2] < 80)
+
+            bboxes = []
+            if green_mask.sum() > 20:
+                # 找绿色区域的连通分量 → 外接矩形
+                from scipy import ndimage
+                labeled, n_features = ndimage.label(green_mask)
+                for i in range(1, n_features + 1):
+                    ys, xs = np.where(labeled == i)
+                    if len(ys) > 10:  # 最小10像素
+                        x1, x2 = xs.min(), xs.max()
+                        y1, y2 = ys.min(), ys.max()
+                        # YOLO: cx, cy, bw, bh (归一化)
+                        cx = ((x1 + x2) / 2) / w
+                        cy = ((y1 + y2) / 2) / h
+                        bw = (x2 - x1) / w
+                        bh = (y2 - y1) / h
+                        bboxes.append(f"0 {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
+
+            # 80% train, 20% val
+            is_train = rng.random() < 0.8
+            split = "train" if is_train else "val"
+
+            # 复制/保存图片（去除绿色标注，还原原始外观）
+            clean_img = arr.copy()
+            clean_img[green_mask] = clean_img[green_mask] * 0.5 + np.array([200, 200, 200]) * 0.5
+            clean_img = Image.fromarray(clean_img)
+            save_name = img_file.stem + ".jpg"
+            clean_img.save(yolo_dir / "images" / split / save_name, quality=90)
+
+            if bboxes:
+                with open(yolo_dir / "labels" / split / (img_file.stem + ".txt"), "w") as f:
+                    f.write("\n".join(bboxes))
+            else:
+                # 正常样本（无缺陷）→ 空标注文件
+                with open(yolo_dir / "labels" / split / (img_file.stem + ".txt"), "w") as f:
+                    pass
+
+            if is_train:
+                train_count += 1
+            else:
+                val_count += 1
+
+        except Exception as e:
+            continue
+
+    print(f"  转换完成: train={train_count}张, val={val_count}张, 缺陷bbox={sum(1 for d in (yolo_dir/'labels'/'train').iterdir() if d.stat().st_size > 0)}张有缺陷")
+
+    # 创建 data.yaml
+    yaml_content = f"""# Mendeley Ceramics Defect Detection (mask→YOLO converted)
+path: {yolo_dir.absolute().as_posix()}
+train: images/train
+val: images/val
+nc: 1
+names: ['defect']
+"""
+    yaml_path = yolo_dir / "data.yaml"
+    with open(yaml_path, "w", encoding="utf-8") as f:
+        f.write(yaml_content)
+
+    return str(yaml_path)
 
 
 def generate_synthetic_ceramic_data(data_dir="data/ceramic_defects"):
