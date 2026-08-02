@@ -13,12 +13,26 @@ WEIGHTS = os.path.join(PROJ, "yolov8n.pt")
 assert os.path.exists(WEIGHTS), f"Missing {WEIGHTS}"
 
 # 如果数据集不存在，自动生成合成陶瓷缺陷数据
+# ⚠️ 合成数据仅供代码验证，比赛正式提交请使用真实数据集！
+#    推荐: 天池瓷砖瑕疵检测 https://tianchi.aliyun.com/dataset/110088
+DATA_SOURCE = "未知"
 if not os.path.exists(os.path.join(DATA, "data.yaml")):
-    print("数据集不存在，自动生成合成陶瓷缺陷数据...")
-    sys.path.insert(0, PROJ)
-    from ai_demo import generate_synthetic_ceramic_data
-    generate_synthetic_ceramic_data(DATA)
-    assert os.path.exists(os.path.join(DATA, "data.yaml")), "数据生成失败！"
+    # 检查天池数据集
+    tianchi = os.path.join(PROJ, "data", "tianchi_tiles")
+    if os.path.exists(tianchi) and len([f for f in os.listdir(tianchi) if f.endswith(('.jpg','.png'))]) > 100:
+        print("✅ 使用天池瓷砖瑕疵检测数据集（真实产线数据）")
+        DATA = tianchi
+        DATA_SOURCE = "天池瓷砖瑕疵检测数据集（真实产线数据，~24,000张）"
+    else:
+        print("⚠️  未找到真实数据集，生成合成数据（仅供代码验证）")
+        print("   推荐下载: https://tianchi.aliyun.com/dataset/110088")
+        sys.path.insert(0, PROJ)
+        from ai_demo import generate_synthetic_ceramic_data
+        generate_synthetic_ceramic_data(DATA)
+        DATA_SOURCE = "⚠️ 合成数据（仅供代码验证，非比赛使用）"
+        assert os.path.exists(os.path.join(DATA, "data.yaml")), "数据生成失败！"
+else:
+    DATA_SOURCE = "本地已有数据集"
 
 print(f"Project: {PROJ}")
 print(f"Data: {DATA}")
@@ -83,9 +97,11 @@ metrics_dict = {
     "_meta": {
         "is_real_training": True,
         "device": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
-        "data": "ceramic_defects_synthetic_6class",
+        "data_source": DATA_SOURCE,
+        "data": "ceramic_defects",
         "date": time.strftime("%Y-%m-%d %H:%M"),
-        "scenario": "闽清县陶瓷工业AI质检"
+        "scenario": "闽清县陶瓷工业AI质检",
+        "note": "如data_source含'合成'字样，请用真实数据集重新训练后再用于比赛提交"
     },
     "model": {"name": "YOLOv8n", "size_MB": 6.2, "parameters_millions": 3.2},
     "performance": {

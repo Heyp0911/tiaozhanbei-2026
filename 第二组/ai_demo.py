@@ -142,75 +142,85 @@ def prepare_ceramic_dataset(data_dir="data/ceramic_defects"):
     准备陶瓷缺陷检测数据集
 
     策略（按优先级）：
-      1. 检查本地是否已有数据
-      2. 尝试从 Roboflow Universe 下载（YOLO原生格式）
-      3. 尝试从 Hugging Face Datasets 下载
-      4. 生成合成数据作为兜底（确保代码可运行）
+      1. 检查本地是否已有标注数据 → 直接使用
+      2. 检查 data/tianchi_tiles/ → 天池瓷砖数据集（推荐，需手动下载）
+      3. 尝试下载 CE7-DET 公开数据集（SCI论文，YOLO原生格式）
+      4. 生成合成数据作为最后兜底（标注为"代码验证用"）
+
+    天池瓷砖瑕疵检测数据集（推荐用于比赛）：
+      下载地址: https://tianchi.aliyun.com/dataset/110088
+      需注册阿里云天池账号（免费），约24,000张佛山产线实拍瓷砖图片
+      下载后解压到 data/tianchi_tiles/ 目录即可自动识别
 
     返回
     ----------
     data_yaml : str or None
-        YOLO格式的 data.yaml 路径，None表示需要走合成路线
+        YOLO格式的 data.yaml 路径
     source_name : str
-        实际使用的数据来源名称
+        实际使用的数据来源名称（含真实性标注）
     """
     import urllib.request
     import zipfile
 
     data_path = Path(data_dir)
 
-    # ── 检查本地已有数据 ──
-    for check_dir in [data_dir, "data/NEU-DET", "data/tianchi_tiles"]:
+    # ── 1. 检查本地已有标注数据 ──
+    for check_dir in [data_dir, "data/tianchi_tiles", "data/CE7-DET", "data/NEU-DET"]:
         check_path = Path(check_dir)
         if check_path.exists():
             jpg_count = len(list(check_path.rglob("*.jpg"))) + len(list(check_path.rglob("*.png")))
             if jpg_count > 100:
-                print(f"[OK] 本地数据集已存在: {check_dir} ({jpg_count}张图片)")
-                # 尝试找到或生成 data.yaml
+                source_label = {
+                    "data/tianchi_tiles": "✅ 天池瓷砖瑕疵检测数据集（真实产线数据，~24,000张）",
+                    "data/CE7-DET": "✅ CE7-DET SCI论文数据集（真实陶瓷表皿，2,964张）",
+                }.get(check_dir, f"✅ 本地数据集 ({check_dir}, {jpg_count}张)")
+                print(f"[OK] {source_label}")
                 yaml_candidates = list(check_path.rglob("*.yaml")) + list(check_path.rglob("*.yml"))
                 if yaml_candidates:
-                    return str(yaml_candidates[0]), f"本地数据集 ({check_dir})"
-                # 没有yaml，尝试从图片推断
-                return str(check_path), f"本地数据集 ({check_dir})"
+                    return str(yaml_candidates[0]), source_label
+                # 没有yaml，尝试自动构造
+                return str(check_path), source_label
 
-    # ── 尝试下载: Roboflow Universe (最可能有YOLO格式) ──
-    print("\n尝试从公开源下载陶瓷缺陷数据集...")
+    # ── 2. 天池数据集提示 ──
+    tianchi_path = Path("data/tianchi_tiles")
+    if tianchi_path.exists() and len(list(tianchi_path.rglob("*.jpg"))) > 100:
+        print("[OK] 检测到天池瓷砖瑕疵检测数据集（真实产线数据）")
+        return str(tianchi_path), "✅ 天池瓷砖瑕疵检测数据集（真实产线数据，~24,000张）"
 
-    # 多个备选下载URL（按优先级）
-    download_attempts = [
-        {
-            "url": "https://storage.googleapis.com/roboflow-platform.appspot.com/",
-            "name": "Roboflow (需具体项目URL)",
-            "direct": False,
-        },
+    # ── 3. 尝试下载 CE7-DET 公开数据集 ──
+    print("\n尝试下载 CE7-DET 陶瓷缺陷公开数据集（SCI论文数据）...")
+    ce7_urls = [
+        "https://github.com/PGYBHF/NGASP-YOLO-and-CE7-DET/archive/refs/heads/main.zip",
     ]
+    for url in ce7_urls:
+        try:
+            zip_path = "data/ce7det_temp.zip"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            resp = urllib.request.urlopen(req, timeout=30)
+            with open(zip_path, 'wb') as f:
+                f.write(resp.read())
+            with zipfile.ZipFile(zip_path, 'r') as zf:
+                zf.extractall("data/CE7-DET/")
+            os.remove(zip_path)
+            print("[OK] CE7-DET数据集下载成功！真实陶瓷表皿缺陷数据（2,964张，7类）")
+            return str(Path("data/CE7-DET")), "✅ CE7-DET SCI论文数据集（真实陶瓷表皿，2,964张）"
+        except Exception as e:
+            print(f"  CE7-DET下载失败: {type(e).__name__}")
+            continue
 
-    # ── 尝试从 Hugging Face Datasets 下载 ──
-    try:
-        print("  尝试 Hugging Face Datasets...")
-        import subprocess
-        result = subprocess.run(
-            [sys.executable, "-c",
-             "from datasets import load_dataset; "
-             "d = load_dataset('keremberke/construction-safety-detection', split='train'); "
-             "print(len(d))"],
-            capture_output=True, text=True, timeout=30
-        )
-        if result.returncode == 0:
-            print(f"  HuggingFace可用 (测试通过)")
-    except Exception:
-        print("  HuggingFace Datasets 不可用，继续...")
-
-    # ── 生成合成陶瓷缺陷数据（可靠兜底）──
-    print("\n[INFO] 自动下载未成功，使用程序化生成的合成陶瓷缺陷数据进行训练。")
-    print("  合成数据基于陶瓷产线典型缺陷模式构造，可验证模型流程。")
-    print("  如需真实数据集，请从以下地址手动下载后放入 data/ 目录：")
-    for src in DATASET_SOURCES:
-        if src["download_url"]:
-            print(f"  · {src['name']}: {src['download_url']}")
+    # ── 4. 兜底：合成数据（仅供代码验证，比赛请使用真实数据集）──
+    print("\n" + "=" * 60)
+    print("⚠️  未找到真实陶瓷缺陷数据集，将使用程序化合成数据。")
+    print("   合成数据仅供代码流程验证，比赛正式提交请使用真实数据集！")
+    print("")
+    print("   推荐下载天池瓷砖瑕疵检测数据集：")
+    print("   https://tianchi.aliyun.com/dataset/110088")
+    print("   （需注册阿里云天池账号，约24,000张佛山产线实拍瓷砖图片）")
+    print("   下载后解压到 data/tianchi_tiles/ 即可自动识别")
+    print("=" * 60)
 
     data_yaml = generate_synthetic_ceramic_data(data_dir)
-    return data_yaml, "合成陶瓷缺陷数据（程序化生成）"
+    return data_yaml, "⚠️ 合成数据（仅供代码验证，非比赛数据）"
 
 
 def generate_synthetic_ceramic_data(data_dir="data/ceramic_defects"):
