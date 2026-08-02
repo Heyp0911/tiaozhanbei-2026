@@ -68,24 +68,36 @@ except (ImportError, OSError):
 # ══════════════════════════════════════════════════════════════
 DATASET_SOURCES = [
     {
-        "name": "CE7-DET (陶瓷表皿缺陷, 7类, 2964张)",
-        "download_url": None,  # GitHub zip 需要特殊处理
-        "note": "论文数据集，YOLO原生格式，来自Expert Systems with Applications 2025",
-        "classes": ["裂纹(CK)", "脏斑(DS)", "缩釉(GS)", "表面污渍(SS)",
-                     "边缺损(EC)", "灰污染(AC)", "针孔(PH)"],
+        "name": "天池瓷砖瑕疵检测数据集（推荐 ⭐⭐⭐）",
+        "url": "https://tianchi.aliyun.com/dataset/110088",
+        "note": "~24,000张佛山产线实拍瓷砖图片，国内最权威陶瓷缺陷数据集。需注册天池账号。",
+        "classes": ["粉团","角裂","滴釉","断墨","滴墨","B孔","落脏","边裂","缺角","砖渣","白边"],
+        "yolo_ready": False,  # 需转换标注格式
+        "manual_download": True,
+    },
+    {
+        "name": "瓷砖缺陷检测数据集（推荐 ⭐⭐）",
+        "url": "https://cloud.tencent.com.cn/developer/article/2542736",
+        "note": "2,871张瓷砖图片，6类缺陷，8,040个标注框。YOLO格式原生就绪，不需转换。",
+        "classes": ["边异常","角异常","白色点瑕疵","浅色块瑕疵","深色点块瑕疵","光圈瑕疵"],
+        "yolo_ready": True,
+        "manual_download": True,
+    },
+    {
+        "name": "Kaggle Tile Defect Dataset",
+        "url": "https://www.kaggle.com/datasets/humarkahramanliornek/tile-dataset",
+        "note": "550张瓷砖图片(缺陷300+正常250)，487MB。需Kaggle账号。",
+        "classes": ["defective", "intact"],
+        "yolo_ready": False,
+        "manual_download": True,
     },
     {
         "name": "Mendeley Ceramics-Defects-Detection",
-        "download_url": "https://data.mendeley.com/datasets/47x6jdbr5j/1",
-        "note": "1600张+7000张增强，需标注转换为YOLO格式",
-        "classes": ["裂纹(crack)", "变形(deformation)"],
-    },
-    {
-        "name": "天池瓷砖瑕疵检测数据集 (阿里云)",
-        "download_url": "https://tianchi.aliyun.com/dataset/110088",
-        "note": "国内最权威陶瓷缺陷数据集，~24000张，需注册天池账号下载。"
-               "若无法自动下载，请手动下载后放入 data/tianchi_tiles/ 目录",
-        "classes": ["粉团", "角裂", "滴釉", "断墨", "滴墨", "B孔", "落脏", "边裂", "缺角", "砖渣", "白边"],
+        "url": "https://data.mendeley.com/datasets/47x6jdbr5j/1",
+        "note": "1,600张+7,000张增强，无需登录，Mendeley直接下载。需转换为YOLO格式。",
+        "classes": ["crack", "deformation"],
+        "yolo_ready": False,
+        "manual_download": True,
     },
 ]
 
@@ -165,29 +177,31 @@ def prepare_ceramic_dataset(data_dir="data/ceramic_defects"):
     data_path = Path(data_dir)
 
     # ── 1. 检查本地已有标注数据 ──
-    for check_dir in [data_dir, "data/tianchi_tiles", "data/CE7-DET", "data/NEU-DET"]:
+    known_datasets = {
+        "data/tianchi_tiles": "✅ 天池瓷砖瑕疵检测数据集（真实产线，~24,000张）",
+        "data/tile_defects": "✅ 瓷砖缺陷检测数据集（YOLO格式，2,871张）",
+        "data/kaggle_tiles": "✅ Kaggle Tile Defect Dataset（550张）",
+        "data/mendeley_ceramics": "✅ Mendeley Ceramics Dataset（1,600+7,000张）",
+        "data/CE7-DET": "✅ CE7-DET SCI论文数据集（2,964张）",
+    }
+    for check_dir, label in known_datasets.items():
         check_path = Path(check_dir)
         if check_path.exists():
             jpg_count = len(list(check_path.rglob("*.jpg"))) + len(list(check_path.rglob("*.png")))
-            if jpg_count > 100:
-                source_label = {
-                    "data/tianchi_tiles": "✅ 天池瓷砖瑕疵检测数据集（真实产线数据，~24,000张）",
-                    "data/CE7-DET": "✅ CE7-DET SCI论文数据集（真实陶瓷表皿，2,964张）",
-                }.get(check_dir, f"✅ 本地数据集 ({check_dir}, {jpg_count}张)")
-                print(f"[OK] {source_label}")
+            if jpg_count > 50:
+                print(f"[OK] {label} ({jpg_count}张)")
                 yaml_candidates = list(check_path.rglob("*.yaml")) + list(check_path.rglob("*.yml"))
                 if yaml_candidates:
-                    return str(yaml_candidates[0]), source_label
-                # 没有yaml，尝试自动构造
-                return str(check_path), source_label
+                    return str(yaml_candidates[0]), label
+                return str(check_path), label
+    # Also check the default data_dir
+    if Path(data_dir).exists():
+        jpg_count = len(list(Path(data_dir).rglob("*.jpg"))) + len(list(Path(data_dir).rglob("*.png")))
+        if jpg_count > 50:
+            print(f"[OK] 本地数据集: {data_dir} ({jpg_count}张)")
+            return str(data_dir), f"✅ 本地数据集 ({data_dir})"
 
-    # ── 2. 天池数据集提示 ──
-    tianchi_path = Path("data/tianchi_tiles")
-    if tianchi_path.exists() and len(list(tianchi_path.rglob("*.jpg"))) > 100:
-        print("[OK] 检测到天池瓷砖瑕疵检测数据集（真实产线数据）")
-        return str(tianchi_path), "✅ 天池瓷砖瑕疵检测数据集（真实产线数据，~24,000张）"
-
-    # ── 3. 尝试下载 CE7-DET 公开数据集 ──
+    # ── 2. 尝试下载 CE7-DET 公开数据集 ──
     print("\n尝试下载 CE7-DET 陶瓷缺陷公开数据集（SCI论文数据）...")
     ce7_urls = [
         "https://github.com/PGYBHF/NGASP-YOLO-and-CE7-DET/archive/refs/heads/main.zip",
@@ -210,13 +224,28 @@ def prepare_ceramic_dataset(data_dir="data/ceramic_defects"):
 
     # ── 4. 兜底：合成数据（仅供代码验证，比赛请使用真实数据集）──
     print("\n" + "=" * 60)
-    print("⚠️  未找到真实陶瓷缺陷数据集，将使用程序化合成数据。")
-    print("   合成数据仅供代码流程验证，比赛正式提交请使用真实数据集！")
+    print("⚠️  未找到真实陶瓷缺陷数据集")
+    print("=" * 60)
     print("")
-    print("   推荐下载天池瓷砖瑕疵检测数据集：")
-    print("   https://tianchi.aliyun.com/dataset/110088")
-    print("   （需注册阿里云天池账号，约24,000张佛山产线实拍瓷砖图片）")
-    print("   下载后解压到 data/tianchi_tiles/ 即可自动识别")
+    print("   以下真实数据集可手动下载（按推荐顺序）：")
+    print("")
+    print("   ① 天池瓷砖瑕疵检测（最佳选择）")
+    print("      https://tianchi.aliyun.com/dataset/110088")
+    print("      需注册天池账号 → ~24,000张佛山产线实拍 → 解压到 data/tianchi_tiles/")
+    print("")
+    print("   ② 瓷砖缺陷检测数据集（YOLO格式就绪，无需转换）")
+    print("      https://cloud.tencent.com.cn/developer/article/2542736")
+    print("      2,871张 / 6类缺陷 / 直接可用 → 解压到 data/tile_defects/")
+    print("")
+    print("   ③ Kaggle Tile Dataset")
+    print("      https://www.kaggle.com/datasets/humarkahramanliornek/tile-dataset")
+    print("      550张 / 487MB → 解压到 data/kaggle_tiles/")
+    print("")
+    print("   ④ Mendeley Ceramics（免登录直下）")
+    print("      https://data.mendeley.com/datasets/47x6jdbr5j/1")
+    print("      1,600+7,000张 → 解压到 data/mendeley_ceramics/")
+    print("")
+    print("   当前将使用合成数据进行流程验证（合成数据不能用于比赛提交！）")
     print("=" * 60)
 
     data_yaml = generate_synthetic_ceramic_data(data_dir)
