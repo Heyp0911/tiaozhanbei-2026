@@ -62,18 +62,58 @@ import numpy as np
 from PIL import Image
 
 # 复制数据到临时ASCII路径避免YOLO中文路径编码问题
-import tempfile
+import tempfile, glob as _glob
 tmp = tempfile.mkdtemp(prefix="ceramic_")
 tmp_data = os.path.join(tmp, "ceramic")
 shutil.copytree(DATA, tmp_data)
-# 修复yaml中的path
-yaml_path = os.path.join(tmp_data, "data.yaml")
-with open(yaml_path, "r") as f:
-    yaml_content = f.read()
-yaml_content = yaml_content.replace("path: .", f"path: {tmp_data.replace(chr(92), '/')}")
-with open(yaml_path, "w") as f:
-    f.write(yaml_content)
+
+# 查找 data.yaml（Roboflow可能嵌套在子目录里）
+yaml_path = None
+for root, dirs, files in os.walk(tmp_data):
+    for f in files:
+        if f.endswith('.yaml') or f.endswith('.yml'):
+            yaml_path = os.path.join(root, f)
+            break
+    if yaml_path:
+        break
+
+if yaml_path is None:
+    # 自动生成 data.yaml
+    print("[INFO] 未找到data.yaml，自动生成...")
+    train_img = os.path.join(tmp_data, "train", "images")
+    val_img = os.path.join(tmp_data, "valid", "images") if os.path.exists(os.path.join(tmp_data, "valid", "images")) else os.path.join(tmp_data, "val", "images")
+    # 检测类别数
+    label_dir = os.path.join(tmp_data, "train", "labels")
+    classes = set()
+    if os.path.exists(label_dir):
+        for lf in os.listdir(label_dir):
+            if lf.endswith('.txt'):
+                with open(os.path.join(label_dir, lf)) as lff:
+                    for line in lff:
+                        c = line.strip().split()[0] if line.strip() else None
+                        if c is not None:
+                            classes.add(int(c))
+    nc = max(classes) + 1 if classes else 3
+    yaml_path = os.path.join(tmp_data, "data.yaml")
+    with open(yaml_path, "w") as f:
+        f.write(f"path: {tmp_data.replace(chr(92), '/')}\n")
+        f.write(f"train: train/images\n")
+        f.write(f"val: {'valid/images' if 'valid' in str(val_img) else 'val/images'}\n")
+        f.write(f"nc: {nc}\n")
+        f.write(f"names: [{', '.join(str(i) for i in range(nc))}]\n")
+    print(f"  生成 data.yaml: nc={nc}")
+else:
+    # 修复yaml中的path为 temp 目录
+    with open(yaml_path, "r") as f:
+        yaml_content = f.read()
+    # 替换可能的各种 path 写法
+    import re
+    yaml_content = re.sub(r'^path:\s*.+$', f'path: {tmp_data.replace(chr(92), "/")}', yaml_content, flags=re.MULTILINE)
+    with open(yaml_path, "w") as f:
+        f.write(yaml_content)
+
 print(f"Temp data: {tmp_data}")
+print(f"YAML: {yaml_path}")
 
 # 切换到临时目录运行
 orig_cwd = os.getcwd()
