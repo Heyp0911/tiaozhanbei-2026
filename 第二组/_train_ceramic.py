@@ -9,9 +9,28 @@ def main():
     PROJ = os.getcwd()
     DATA = os.path.join(PROJ, "data", "ceramic_defects")
     OUT = os.path.join(PROJ, "outputs", "ceramic_qa_results")
-    WEIGHTS = os.path.join(PROJ, "yolov8n.pt")
-
-    assert os.path.exists(WEIGHTS), f"Missing {WEIGHTS}"
+    WEIGHTS = os.path.join(PROJ, "yolov8s.pt")
+    # 如果yolov8s.pt不存在，尝试下载
+    if not os.path.exists(WEIGHTS):
+        print("下载 yolov8s.pt...")
+        import urllib.request
+        for url in [
+            "https://hf-mirror.com/Ultralytics/YOLOv8/resolve/main/yolov8s.pt",
+            "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s.pt",
+        ]:
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                resp = urllib.request.urlopen(req, timeout=60)
+                with open(WEIGHTS, 'wb') as f:
+                    while True:
+                        chunk = resp.read(65536)
+                        if not chunk: break
+                        f.write(chunk)
+                print(f"  [OK] yolov8s.pt: {os.path.getsize(WEIGHTS)/1e6:.1f}MB")
+                break
+            except Exception as e:
+                continue
+    assert os.path.exists(WEIGHTS), f"Missing {WEIGHTS}. 请手动下载放入当前目录。"
 
     DATA_SOURCE = "未知"
     if not os.path.exists(os.path.join(DATA, "data.yaml")):
@@ -125,7 +144,7 @@ def main():
     model = YOLO(WEIGHTS)
     t0 = time.time()
     results = model.train(
-        data=yaml_path, epochs=50, imgsz=640, batch=16,
+        data=yaml_path, epochs=200, imgsz=640, batch=16,
         name='ceramic_train', project=OUT, exist_ok=True,
         verbose=True, device='cuda', amp=False, workers=0,
     )
@@ -161,7 +180,7 @@ def main():
             "date": time.strftime("%Y-%m-%d %H:%M"),
             "scenario": "闽清县陶瓷工业AI质检"
         },
-        "model": {"name": "YOLOv8n", "size_MB": 6.2, "parameters_millions": 3.2},
+        "model": {"name": "YOLOv8s", "size_MB": 22.5, "parameters_millions": 11.2},
         "performance": {
             "mAP50": round(mAP50, 4),
             "mAP50_95": round(mAP50_95, 4),
