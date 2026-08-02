@@ -178,6 +178,7 @@ def prepare_ceramic_dataset(data_dir="data/ceramic_defects"):
 
     # ── 1. 检查本地已有标注数据 ──
     known_datasets = {
+        "data/ceramic_tiles": "✅ Roboflow陶瓷砖缺陷数据集（YOLO格式，CC BY 4.0）",
         "data/tianchi_tiles": "✅ 天池瓷砖瑕疵检测数据集（真实产线，~24,000张）",
         "data/tile_defects": "✅ 瓷砖缺陷检测数据集（YOLO格式，2,871张）",
         "data/kaggle_tiles": "✅ Kaggle Tile Defect Dataset（550张）",

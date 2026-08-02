@@ -17,15 +17,33 @@ assert os.path.exists(WEIGHTS), f"Missing {WEIGHTS}"
 #    推荐: 天池瓷砖瑕疵检测 https://tianchi.aliyun.com/dataset/110088
 DATA_SOURCE = "未知"
 if not os.path.exists(os.path.join(DATA, "data.yaml")):
-    # 检查天池数据集
-    tianchi = os.path.join(PROJ, "data", "tianchi_tiles")
-    if os.path.exists(tianchi) and len([f for f in os.listdir(tianchi) if f.endswith(('.jpg','.png'))]) > 100:
-        print("✅ 使用天池瓷砖瑕疵检测数据集（真实产线数据）")
-        DATA = tianchi
-        DATA_SOURCE = "天池瓷砖瑕疵检测数据集（真实产线数据，~24,000张）"
-    else:
+    # 按优先级检查真实数据集
+    dataset_dirs = [
+        ("data/ceramic_tiles", "✅ Roboflow陶瓷砖缺陷数据集（YOLO格式，CC BY 4.0）"),
+        ("data/tianchi_tiles", "✅ 天池瓷砖瑕疵检测数据集（真实产线数据）"),
+        ("data/tile_defects", "✅ 瓷砖缺陷检测数据集（YOLO格式，2,871张）"),
+        ("data/mendeley_ceramics", "✅ Mendeley Ceramics（18,560张patch）"),
+    ]
+    found = False
+    for dir_name, label in dataset_dirs:
+        check = os.path.join(PROJ, dir_name)
+        if os.path.exists(check):
+            imgs = [f for f in os.listdir(check) if f.endswith(('.jpg','.png'))]
+            # 也检查子目录
+            if len(imgs) < 50:
+                for root, dirs, files in os.walk(check):
+                    imgs.extend([f for f in files if f.endswith(('.jpg','.png'))])
+            if len(imgs) >= 50:
+                print(f"{label} ({len(imgs)}张)")
+                DATA = os.path.join(PROJ, dir_name)
+                DATA_SOURCE = label
+                found = True
+                break
+
+    if not found:
         print("⚠️  未找到真实数据集，生成合成数据（仅供代码验证）")
-        print("   推荐下载: https://tianchi.aliyun.com/dataset/110088")
+        print("   推荐下载 Roboflow 陶瓷砖缺陷数据集（免费，YOLO格式）：")
+        print("   https://universe.roboflow.com/spencerworkspace/ceramic-tile-defects-xhvxa")
         sys.path.insert(0, PROJ)
         from ai_demo import generate_synthetic_ceramic_data
         generate_synthetic_ceramic_data(DATA)
