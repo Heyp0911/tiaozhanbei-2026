@@ -5,7 +5,18 @@ __pycache__/
 
 # 临时提取文件
 _*.txt
-_*.py
+_pdf_output.txt
+_division_plan.txt
+_schedule.txt
+_paper_text.txt
+_电价表_text.txt
+_read_pdf.py
+
+# 合成数据集（在目标机器上自动生成，80MB+）
+data/ceramic_defects/
+
+# YOLO训练运行时目录
+runs/
 
 # 压缩包（冗余备份）
 *.zip
