@@ -136,6 +136,12 @@ def main():
     print(f"Temp: {tmp_data}")
     print(f"YAML: {yaml_path}")
 
+    # 修复segment标注→bbox（解决"Box and segment counts should be equal"）
+    print("修复混合标注(segment→bbox)...")
+    sys.path.insert(0, PROJ)
+    from _fix_labels import fix_labels
+    fix_labels(tmp_data)
+
     # 切换到临时目录运行
     orig_cwd = os.getcwd()
     os.chdir(os.path.dirname(yaml_path))
@@ -144,7 +150,7 @@ def main():
     model = YOLO(WEIGHTS)
     t0 = time.time()
     results = model.train(
-        data=yaml_path, epochs=200, imgsz=640, batch=16,
+        data=yaml_path, epochs=150, imgsz=640, batch=16,
         name='ceramic_train', project=OUT, exist_ok=True,
         verbose=True, device='cuda', amp=False, workers=0,
     )
