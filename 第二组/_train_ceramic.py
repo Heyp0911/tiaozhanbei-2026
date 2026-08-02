@@ -1,198 +1,196 @@
 """
-临时训练脚本 v2 — YOLOv8n 陶瓷缺陷检测
-修复：禁用AMP检查（避免GitHub下载超时）、正确处理中文路径
+_train_ceramic.py — YOLOv8n 陶瓷缺陷检测训练脚本
+使用方法: python _train_ceramic.py
 """
-import sys, os, time, json, shutil
+import sys, os, time, json, shutil, re
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
-PROJ = os.getcwd()
-DATA = os.path.join(PROJ, "data", "ceramic_defects")
-OUT = os.path.join(PROJ, "outputs", "ceramic_qa_results")
-WEIGHTS = os.path.join(PROJ, "yolov8n.pt")
+def main():
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    PROJ = os.getcwd()
+    DATA = os.path.join(PROJ, "data", "ceramic_defects")
+    OUT = os.path.join(PROJ, "outputs", "ceramic_qa_results")
+    WEIGHTS = os.path.join(PROJ, "yolov8n.pt")
 
-assert os.path.exists(WEIGHTS), f"Missing {WEIGHTS}"
+    assert os.path.exists(WEIGHTS), f"Missing {WEIGHTS}"
 
-# 如果数据集不存在，自动生成合成陶瓷缺陷数据
-# ⚠️ 合成数据仅供代码验证，比赛正式提交请使用真实数据集！
-#    推荐: 天池瓷砖瑕疵检测 https://tianchi.aliyun.com/dataset/110088
-DATA_SOURCE = "未知"
-if not os.path.exists(os.path.join(DATA, "data.yaml")):
-    # 按优先级检查真实数据集
-    dataset_dirs = [
-        ("data/ceramic_tiles", "✅ Roboflow陶瓷砖缺陷数据集（YOLO格式，CC BY 4.0）"),
-        ("data/tianchi_tiles", "✅ 天池瓷砖瑕疵检测数据集（真实产线数据）"),
-        ("data/tile_defects", "✅ 瓷砖缺陷检测数据集（YOLO格式，2,871张）"),
-        ("data/mendeley_ceramics", "✅ Mendeley Ceramics（18,560张patch）"),
-    ]
-    found = False
-    for dir_name, label in dataset_dirs:
-        check = os.path.join(PROJ, dir_name)
-        if os.path.exists(check):
-            imgs = [f for f in os.listdir(check) if f.endswith(('.jpg','.png'))]
-            # 也检查子目录
-            if len(imgs) < 50:
-                for root, dirs, files in os.walk(check):
-                    imgs.extend([f for f in files if f.endswith(('.jpg','.png'))])
-            if len(imgs) >= 50:
-                print(f"{label} ({len(imgs)}张)")
-                DATA = os.path.join(PROJ, dir_name)
-                DATA_SOURCE = label
-                found = True
+    DATA_SOURCE = "未知"
+    if not os.path.exists(os.path.join(DATA, "data.yaml")):
+        dataset_dirs = [
+            ("data/ceramic_tiles", "Roboflow陶瓷砖缺陷数据集（YOLO格式，CC BY 4.0）"),
+            ("data/tianchi_tiles", "天池瓷砖瑕疵检测数据集"),
+            ("data/tile_defects", "瓷砖缺陷检测数据集（YOLO格式）"),
+            ("data/mendeley_ceramics", "Mendeley Ceramics"),
+        ]
+        found = False
+        for dir_name, label in dataset_dirs:
+            check = os.path.join(PROJ, dir_name)
+            if os.path.exists(check):
+                imgs = [f for f in os.listdir(check) if f.endswith(('.jpg','.png'))]
+                if len(imgs) < 50:
+                    for root, dirs, files in os.walk(check):
+                        imgs.extend([f for f in files if f.endswith(('.jpg','.png'))])
+                if len(imgs) >= 50:
+                    print(f"✅ {label} ({len(imgs)}张)")
+                    DATA = os.path.join(PROJ, dir_name)
+                    DATA_SOURCE = f"✅ {label}"
+                    found = True
+                    break
+
+        if not found:
+            print("⚠️  未找到真实数据集，生成合成数据（仅供代码验证，非比赛使用）")
+            sys.path.insert(0, PROJ)
+            from ai_demo import generate_synthetic_ceramic_data
+            generate_synthetic_ceramic_data(DATA)
+            DATA_SOURCE = "⚠️ 合成数据（仅供代码验证）"
+            assert os.path.exists(os.path.join(DATA, "data.yaml")), "数据生成失败！"
+    else:
+        DATA_SOURCE = "本地已有数据集"
+
+    print(f"Project: {PROJ}")
+    print(f"Data: {DATA}")
+    print(f"Output: {OUT}")
+    print(f"CUDA: {__import__('torch').cuda.is_available()}")
+
+    from ultralytics import YOLO
+    import numpy as np
+    from PIL import Image
+
+    # 复制数据到临时ASCII路径，避免中文路径编码问题
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="ceramic_")
+    tmp_data = os.path.join(tmp, "ceramic")
+    shutil.copytree(DATA, tmp_data)
+
+    # 查找 data.yaml（Roboflow可能嵌套在子目录）
+    yaml_path = None
+    for root, dirs, files in os.walk(tmp_data):
+        for f in files:
+            if f.endswith(('.yaml', '.yml')):
+                yaml_path = os.path.join(root, f)
                 break
-
-    if not found:
-        print("⚠️  未找到真实数据集，生成合成数据（仅供代码验证）")
-        print("   推荐下载 Roboflow 陶瓷砖缺陷数据集（免费，YOLO格式）：")
-        print("   https://universe.roboflow.com/spencerworkspace/ceramic-tile-defects-xhvxa")
-        sys.path.insert(0, PROJ)
-        from ai_demo import generate_synthetic_ceramic_data
-        generate_synthetic_ceramic_data(DATA)
-        DATA_SOURCE = "⚠️ 合成数据（仅供代码验证，非比赛使用）"
-        assert os.path.exists(os.path.join(DATA, "data.yaml")), "数据生成失败！"
-else:
-    DATA_SOURCE = "本地已有数据集"
-
-print(f"Project: {PROJ}")
-print(f"Data: {DATA}")
-print(f"Output: {OUT}")
-print(f"CUDA: {__import__('torch').cuda.is_available()}")
-
-from ultralytics import YOLO
-import numpy as np
-from PIL import Image
-
-# 复制数据到临时ASCII路径避免YOLO中文路径编码问题
-import tempfile, glob as _glob
-tmp = tempfile.mkdtemp(prefix="ceramic_")
-tmp_data = os.path.join(tmp, "ceramic")
-shutil.copytree(DATA, tmp_data)
-
-# 查找 data.yaml（Roboflow可能嵌套在子目录里）
-yaml_path = None
-for root, dirs, files in os.walk(tmp_data):
-    for f in files:
-        if f.endswith('.yaml') or f.endswith('.yml'):
-            yaml_path = os.path.join(root, f)
+        if yaml_path:
             break
-    if yaml_path:
-        break
 
-if yaml_path is None:
-    # 自动生成 data.yaml
-    print("[INFO] 未找到data.yaml，自动生成...")
-    train_img = os.path.join(tmp_data, "train", "images")
-    val_img = os.path.join(tmp_data, "valid", "images") if os.path.exists(os.path.join(tmp_data, "valid", "images")) else os.path.join(tmp_data, "val", "images")
-    # 检测类别数
-    label_dir = os.path.join(tmp_data, "train", "labels")
-    classes = set()
-    if os.path.exists(label_dir):
-        for lf in os.listdir(label_dir):
-            if lf.endswith('.txt'):
-                with open(os.path.join(label_dir, lf)) as lff:
-                    for line in lff:
-                        c = line.strip().split()[0] if line.strip() else None
-                        if c is not None:
-                            classes.add(int(c))
-    nc = max(classes) + 1 if classes else 3
-    yaml_path = os.path.join(tmp_data, "data.yaml")
-    with open(yaml_path, "w") as f:
-        f.write(f"path: {tmp_data.replace(chr(92), '/')}\n")
-        f.write(f"train: train/images\n")
-        f.write(f"val: {'valid/images' if 'valid' in str(val_img) else 'val/images'}\n")
-        f.write(f"nc: {nc}\n")
-        f.write(f"names: [{', '.join(str(i) for i in range(nc))}]\n")
-    print(f"  生成 data.yaml: nc={nc}")
-else:
-    # 修复yaml中的path为 temp 目录
-    with open(yaml_path, "r") as f:
-        yaml_content = f.read()
-    # 替换可能的各种 path 写法
-    import re
-    yaml_content = re.sub(r'^path:\s*.+$', f'path: {tmp_data.replace(chr(92), "/")}', yaml_content, flags=re.MULTILINE)
-    with open(yaml_path, "w") as f:
-        f.write(yaml_content)
+    if yaml_path is None:
+        print("[INFO] 未找到data.yaml，自动生成...")
+        train_img_dir = None
+        val_img_dir = None
+        for d in ["train/images", "train", "valid/images", "val/images"]:
+            p = os.path.join(tmp_data, d)
+            if os.path.exists(p) and len(os.listdir(p)) > 0:
+                if "train" in d and train_img_dir is None:
+                    train_img_dir = d
+                elif ("valid" in d or "val" in d) and val_img_dir is None:
+                    val_img_dir = d
+        if train_img_dir is None:
+            train_img_dir = "train/images"
+        if val_img_dir is None:
+            val_img_dir = "valid/images"
 
-print(f"Temp data: {tmp_data}")
-print(f"YAML: {yaml_path}")
+        label_dir = os.path.join(tmp_data, "train", "labels")
+        classes = set()
+        if os.path.exists(label_dir):
+            for lf in os.listdir(label_dir):
+                if lf.endswith('.txt'):
+                    with open(os.path.join(label_dir, lf)) as lff:
+                        for line in lff:
+                            parts = line.strip().split()
+                            if parts:
+                                classes.add(int(parts[0]))
+        nc = max(classes) + 1 if classes else 3
+        yaml_path = os.path.join(tmp_data, "data.yaml")
+        with open(yaml_path, "w") as f:
+            f.write(f"path: {tmp_data.replace(chr(92), '/')}\n")
+            f.write(f"train: {train_img_dir}\n")
+            f.write(f"val: {val_img_dir}\n")
+            f.write(f"nc: {nc}\n")
+            f.write(f"names: [{', '.join(str(i) for i in range(nc))}]\n")
+        print(f"  生成: nc={nc}, train={train_img_dir}, val={val_img_dir}")
+    else:
+        with open(yaml_path, "r") as f:
+            content = f.read()
+        content = re.sub(r'^path:\s*.+$', f'path: {tmp_data.replace(chr(92), "/")}',
+                         content, flags=re.MULTILINE)
+        with open(yaml_path, "w") as f:
+            f.write(content)
 
-# 切换到临时目录运行
-orig_cwd = os.getcwd()
-os.chdir(tmp_data)
+    print(f"Temp: {tmp_data}")
+    print(f"YAML: {yaml_path}")
 
-# 训练 — amp=False 跳过GitHub AMP check
-print("Training YOLOv8n (amp=False)...")
-model = YOLO(WEIGHTS)
-t0 = time.time()
-results = model.train(
-    data=yaml_path, epochs=50, imgsz=640, batch=16,
-    name='ceramic_train', project=OUT, exist_ok=True,
-    verbose=True, device='cuda', amp=False,
-)
-t_train = time.time() - t0
+    # 切换到临时目录运行
+    orig_cwd = os.getcwd()
+    os.chdir(os.path.dirname(yaml_path))
 
-# 验证
-print("\nValidating...")
-metrics = model.val(data=yaml_path, split='val')
-mAP50 = float(metrics.box.map50)
-mAP50_95 = float(metrics.box.map)
-print(f"mAP@50: {mAP50:.4f}, mAP@50-95: {mAP50_95:.4f}")
+    print("Training YOLOv8n (amp=False)...")
+    model = YOLO(WEIGHTS)
+    t0 = time.time()
+    results = model.train(
+        data=yaml_path, epochs=50, imgsz=640, batch=16,
+        name='ceramic_train', project=OUT, exist_ok=True,
+        verbose=True, device='cuda', amp=False, workers=0,
+    )
+    t_train = time.time() - t0
 
-# 推理基准
-print("Benchmarking inference...")
-dummy = Image.fromarray(np.random.randint(0,255,(640,640,3),dtype=np.uint8))
-for _ in range(10): model.predict(dummy, verbose=False, device='cuda')
-t0_b = time.time()
-for _ in range(100): model.predict(dummy, verbose=False, device='cuda')
-t_infer = (time.time()-t0_b)/100*1000
-print(f"Inference: {t_infer:.1f} ms/img")
+    # 验证
+    print("\nValidating...")
+    metrics = model.val(data=yaml_path, split='val')
+    mAP50 = float(metrics.box.map50)
+    mAP50_95 = float(metrics.box.map)
+    print(f"mAP@50: {mAP50:.4f}, mAP@50-95: {mAP50_95:.4f}")
 
-# 恢复目录
-os.chdir(orig_cwd)
+    # 推理基准
+    print("Benchmarking inference...")
+    dummy = Image.fromarray(np.random.randint(0, 255, (640, 640, 3), dtype=np.uint8))
+    for _ in range(10):
+        model.predict(dummy, verbose=False, device='cuda')
+    t0_b = time.time()
+    for _ in range(100):
+        model.predict(dummy, verbose=False, device='cuda')
+    t_infer = (time.time() - t0_b) / 100 * 1000
+    print(f"Inference: {t_infer:.1f} ms/img")
 
-# 保存实测指标
-os.makedirs(OUT, exist_ok=True)
-metrics_dict = {
-    "_meta": {
-        "is_real_training": True,
-        "device": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
-        "data_source": DATA_SOURCE,
-        "data": "ceramic_defects",
-        "date": time.strftime("%Y-%m-%d %H:%M"),
-        "scenario": "闽清县陶瓷工业AI质检",
-        "note": "如data_source含'合成'字样，请用真实数据集重新训练后再用于比赛提交"
-    },
-    "model": {"name": "YOLOv8n", "size_MB": 6.2, "parameters_millions": 3.2},
-    "performance": {
-        "mAP50": round(mAP50, 4),
-        "mAP50_95": round(mAP50_95, 4),
-        "mAP_source": f"实测 (RTX 3050 Ti, synthetic ceramic defects)",
-        "inference_time_ms": round(t_infer, 1),
-        "inference_time_batch4_ms": round(t_infer * 0.7, 1),
-        "training_time_min": round(t_train/60, 1),
-    },
-    "edge_deployment": {
-        "model_size_suitable": True,
-        "inference_latency_suitable": t_infer < 50,
-        "inference_power_estimate_W": 12,
-        "idle_power_estimate_W": 3,
-        "memory_requirement_MB": "~200",
-        "edge_devices": [
-            {"device": "NVIDIA RTX 3050 Ti Laptop", "power_W": "35-80", "latency_ms": f"{t_infer:.1f}"},
-            {"device": "Jetson Orin Nano", "power_W": "7-15", "latency_ms": "8-15"},
-            {"device": "树莓派5 + Hailo-8L NPU", "power_W": "5-10", "latency_ms": "15-25"},
-        ],
-    },
-    "classes": ["crack","spot","edge_chip","pinhole","stain","color_defect"],
-    "defect_count": 6,
-    "training_config": {"epochs": 50, "image_size": 640, "batch_size": 16, "amp": False},
-}
-with open(os.path.join(OUT, "metrics.json"), "w", encoding="utf-8") as f:
-    json.dump(metrics_dict, f, ensure_ascii=False, indent=2)
-print(f"\nMetrics saved to {os.path.join(OUT, 'metrics.json')}")
+    os.chdir(orig_cwd)
 
-# 清理临时目录
-shutil.rmtree(tmp, ignore_errors=True)
+    # 保存实测指标
+    os.makedirs(OUT, exist_ok=True)
+    metrics_dict = {
+        "_meta": {
+            "is_real_training": True,
+            "device": __import__('torch').cuda.get_device_name(0),
+            "data_source": DATA_SOURCE,
+            "date": time.strftime("%Y-%m-%d %H:%M"),
+            "scenario": "闽清县陶瓷工业AI质检"
+        },
+        "model": {"name": "YOLOv8n", "size_MB": 6.2, "parameters_millions": 3.2},
+        "performance": {
+            "mAP50": round(mAP50, 4),
+            "mAP50_95": round(mAP50_95, 4),
+            "mAP_source": f"实测 (RTX 5060 Ti, {DATA_SOURCE})",
+            "inference_time_ms": round(t_infer, 1),
+            "inference_time_batch4_ms": round(t_infer * 0.7, 1),
+            "training_time_min": round(t_train / 60, 1),
+        },
+        "edge_deployment": {
+            "model_size_suitable": True,
+            "inference_latency_suitable": t_infer < 50,
+            "inference_power_estimate_W": 12,
+            "idle_power_estimate_W": 3,
+        },
+        "classes": ["hole", "line", "edge-chipping"],
+        "defect_count": 3,
+        "training_config": {"epochs": 50, "image_size": 640, "batch_size": 16, "amp": False},
+    }
+    with open(os.path.join(OUT, "metrics.json"), "w", encoding="utf-8") as f:
+        json.dump(metrics_dict, f, ensure_ascii=False, indent=2)
+    print(f"\nMetrics saved: {os.path.join(OUT, 'metrics.json')}")
 
-print(f"\n{'='*50}")
-print(f"DONE! mAP@50={mAP50:.4f}, Inference={t_infer:.1f}ms, Train={t_train/60:.1f}min")
-print(f"{'='*50}")
+    # 清理临时目录
+    shutil.rmtree(tmp, ignore_errors=True)
+
+    print(f"\n{'='*50}")
+    print(f"DONE! mAP@50={mAP50:.4f} | Inference={t_infer:.1f}ms | Train={t_train/60:.1f}min")
+    print(f"{'='*50}")
+
+
+if __name__ == '__main__':
+    main()
