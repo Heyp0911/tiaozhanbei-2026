@@ -1,0 +1,40 @@
+{
+  "_meta": {
+    "is_real_training": true,
+    "device": "NVIDIA GeForce RTX 5060 Ti",
+    "data_source": "✅ Roboflow陶瓷砖缺陷数据集（YOLO格式，CC BY 4.0）",
+    "date": "2026-08-02 21:37",
+    "scenario": "闽清县陶瓷工业AI质检"
+  },
+  "model": {
+    "name": "YOLOv8n",
+    "size_MB": 6.2,
+    "parameters_millions": 3.2
+  },
+  "performance": {
+    "mAP50": 0.5235,
+    "mAP50_95": 0.2579,
+    "mAP_source": "实测 (RTX 5060 Ti, ✅ Roboflow陶瓷砖缺陷数据集（YOLO格式，CC BY 4.0）)",
+    "inference_time_ms": 5.9,
+    "inference_time_batch4_ms": 4.1,
+    "training_time_min": 8.3
+  },
+  "edge_deployment": {
+    "model_size_suitable": true,
+    "inference_latency_suitable": true,
+    "inference_power_estimate_W": 12,
+    "idle_power_estimate_W": 3
+  },
+  "classes": [
+    "hole",
+    "line",
+    "edge-chipping"
+  ],
+  "defect_count": 3,
+  "training_config": {
+    "epochs": 50,
+    "image_size": 640,
+    "batch_size": 16,
+    "amp": false
+  }
+}
