@@ -3,7 +3,7 @@
     "is_real_training": true,
     "device": "NVIDIA GeForce RTX 5060 Ti",
     "data_source": "✅ Roboflow陶瓷砖缺陷数据集（YOLO格式，CC BY 4.0）",
-    "date": "2026-08-02 22:43",
+    "date": "2026-08-03 00:18",
     "scenario": "闽清县陶瓷工业AI质检"
   },
   "model": {
@@ -12,12 +12,12 @@
     "parameters_millions": 11.2
   },
   "performance": {
-    "mAP50": 0.5336,
-    "mAP50_95": 0.2738,
+    "mAP50": 0.6509,
+    "mAP50_95": 0.3362,
     "mAP_source": "实测 (RTX 5060 Ti, ✅ Roboflow陶瓷砖缺陷数据集（YOLO格式，CC BY 4.0）)",
-    "inference_time_ms": 7.2,
-    "inference_time_batch4_ms": 5.0,
-    "training_time_min": 50.0
+    "inference_time_ms": 7.5,
+    "inference_time_batch4_ms": 5.3,
+    "training_time_min": 37.9
   },
   "edge_deployment": {
     "model_size_suitable": true,
